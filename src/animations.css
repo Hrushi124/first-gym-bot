@@ -1,7 +1,6 @@
-/* Original animations only */
+/* Optimized animations for cross-browser compatibility */
 
-/* Any original animations should remain here */
-
+/* Float animation */
 .float-1 {
   animation: float 4s ease-in-out infinite;
 }
@@ -16,17 +15,16 @@
 }
 
 @keyframes float {
-  0% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-20px);
-  }
+  0%,
   100% {
     transform: translateY(0px);
   }
+  50% {
+    transform: translateY(-10px);
+  }
 }
 
+/* Scale transitions */
 .hover-scale {
   transition: transform 0.3s ease-out;
 }
@@ -34,43 +32,12 @@
   transform: scale(1.05);
 }
 
+/* Glow effect */
 .glow {
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
 }
 
-/* Enhanced animations */
-@keyframes pulse {
-  0% {
-    transform: scale(1);
-    opacity: 0.8;
-  }
-  50% {
-    transform: scale(1.05);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 0.8;
-  }
-}
-
-.pulse {
-  animation: pulse 3s ease-in-out infinite;
-}
-
-@keyframes rotate {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.slow-rotate {
-  animation: rotate 20s linear infinite;
-}
-
+/* Shimmer effect */
 @keyframes shimmer {
   0% {
     background-position: -100% 0;
@@ -91,23 +58,15 @@
   animation: shimmer 3s infinite;
 }
 
-.card-hover {
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-
-.card-hover:hover {
-  transform: translateY(-10px) scale(1.02);
-  box-shadow: 0 15px 30px rgba(80, 50, 180, 0.2);
-}
-
+/* Fade/blur in effect */
 .blur-in {
-  animation: blurIn 0.8s ease-out forwards;
+  animation: blurIn 0.5s ease-out forwards;
 }
 
 @keyframes blurIn {
   from {
     opacity: 0;
-    filter: blur(20px);
+    filter: blur(10px);
   }
   to {
     opacity: 1;
@@ -115,65 +74,70 @@
   }
 }
 
+/* Scale in effect */
 .scale-in {
-  animation: scaleIn 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  animation: scaleIn 0.4s ease-out forwards;
 }
 
 @keyframes scaleIn {
   from {
-    transform: scale(0.8);
     opacity: 0;
+    transform: scale(0.95);
   }
   to {
-    transform: scale(1);
     opacity: 1;
+    transform: scale(1);
   }
 }
 
-/* Enhanced animations for the improved UI */
-@keyframes pulse-slow {
+/* Spin animation for loading */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Pulse effect */
+@keyframes pulse {
   0%,
   100% {
-    opacity: 0.7;
     transform: scale(1);
+    opacity: 0.8;
   }
   50% {
-    opacity: 1;
     transform: scale(1.05);
+    opacity: 1;
   }
 }
 
-@keyframes float-slow {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-20px);
-  }
+.pulse {
+  animation: pulse 3s ease-in-out infinite;
 }
 
-@keyframes float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
+/* Card hover effects */
+.card-hover {
+  transition: all 0.3s ease;
 }
 
-@keyframes float-reverse {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(10px);
-  }
+.card-hover:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 24px rgba(80, 50, 180, 0.2);
 }
 
-@keyframes spin-slow {
+/* Original animations only */
+
+/* Any original animations should remain here */
+
+.glow {
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+}
+
+/* Enhanced animations */
+@keyframes rotate {
   from {
     transform: rotate(0deg);
   }
@@ -182,20 +146,26 @@
   }
 }
 
-.animate-pulse-slow {
-  animation: pulse-slow 8s infinite ease-in-out;
+.slow-rotate {
+  animation: rotate 20s linear infinite;
 }
 
-.animate-float-slow {
-  animation: float-slow 12s infinite ease-in-out;
+.card-hover {
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+.card-hover:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 15px 30px rgba(80, 50, 180, 0.2);
 }
 
-.animate-float {
-  animation: float 6s infinite ease-in-out;
-}
-
-.animate-float-reverse {
-  animation: float-reverse 7s infinite ease-in-out;
+/* Simplified spin animation */
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .animate-spin-slow {
