@@ -2,12 +2,10 @@ import React, { useState, useEffect, memo } from "react";
 import {
   Dumbbell,
   Utensils,
-  BarChart2,
-  User,
   ArrowLeft,
   RefreshCw,
   Save,
-  Share2,
+  AlertTriangle,
 } from "lucide-react";
 
 const GenerateFederateUI = ({ onBack }) => {
@@ -15,24 +13,80 @@ const GenerateFederateUI = ({ onBack }) => {
   const [generating, setGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [error, setError] = useState(null);
+  const [apiMode, setApiMode] = useState("generate"); // 'generate' or 'test'
+
+  // Form state
+  const [formData, setFormData] = useState({
+    fitnessGoal: "Weight Loss",
+    experienceLevel: "Beginner",
+    workoutDuration: "30-45 minutes",
+    dietaryPreference: "No Preference",
+  });
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
-
     const resizeHandler = () => requestAnimationFrame(checkMobile);
     window.addEventListener("resize", resizeHandler);
-
     return () => window.removeEventListener("resize", resizeHandler);
   }, []);
 
-  const handleGenerate = () => {
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const toggleApiMode = () => {
+    setApiMode((prev) => (prev === "generate" ? "test" : "generate"));
+    setError(null);
+  };
+
+  const handleGenerate = async () => {
     setGenerating(true);
     setGeneratedContent(null);
+    setError(null);
 
-    // Simulate API call with timeout
-    setTimeout(() => {
-      setGenerating(false);
+    try {
+      const prompt = `Create a personalized fitness plan with both workout and diet recommendations for someone with the following profile:
+        - Fitness Goal: ${formData.fitnessGoal}
+        - Experience Level: ${formData.experienceLevel}
+        - Workout Duration: ${formData.workoutDuration}
+        - Dietary Preference: ${formData.dietaryPreference}
+        
+        Please provide a workout plan with specific exercises, sets, and reps, and a daily meal plan with breakfast, lunch, dinner, and snacks.`;
+
+      const endpoint = apiMode === "generate" ? "/generate" : "/test";
+      console.log(`Calling API endpoint: http://localhost:5000${endpoint}`);
+
+      const response = await fetch(`http://localhost:5000${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || `API error: ${response.status}`);
+      }
+
+      const mealPlanText = data.mealPlan;
+      console.log("API Response:", mealPlanText);
+
+      const workoutSection = extractWorkoutPlan(mealPlanText);
+      const dietSection = extractDietPlan(mealPlanText);
+
+      setGeneratedContent({
+        workout: workoutSection,
+        diet: dietSection,
+        fullText: mealPlanText,
+      });
+    } catch (err) {
+      console.error("Error generating plan:", err);
+      setError(`Failed to generate plan: ${err.message}`);
+
+      // Use fallback data only as a last resort
       setGeneratedContent({
         workout: [
           "3 sets of push-ups (12 reps)",
@@ -46,8 +100,103 @@ const GenerateFederateUI = ({ onBack }) => {
           "Dinner: Salmon with roasted vegetables",
           "Snack: Greek yogurt with nuts",
         ],
+        fullText: "Fallback data due to API error",
       });
-    }, 1000); // Reduced from 2000 for faster response
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const extractWorkoutPlan = (text) => {
+    if (!text)
+      return [
+        "3 sets of push-ups (12 reps)",
+        "4 sets of squats (15 reps)",
+        "3 sets of lunges (10 reps per leg)",
+        "Plank for 60 seconds",
+      ];
+
+    const workoutLines = [];
+    const lines = text.split("\n");
+    let inWorkoutSection = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      if (line.match(/workout|exercise|training plan/i)) {
+        inWorkoutSection = true;
+        continue;
+      }
+
+      if (inWorkoutSection && line.match(/meal plan|diet plan|nutrition/i)) {
+        inWorkoutSection = false;
+        continue;
+      }
+
+      if (
+        inWorkoutSection &&
+        (line.match(/^[\s]*[-*•]|\d+\.\s/) || line.match(/sets|reps/i))
+      ) {
+        const cleanLine = line.replace(/^[\s]*[-*•]|\d+\.\s/, "").trim();
+        if (cleanLine) workoutLines.push(cleanLine);
+      }
+    }
+
+    // Fallback if no workout lines found
+    return workoutLines.length > 0
+      ? workoutLines
+      : [
+          "3 sets of push-ups (12 reps)",
+          "4 sets of squats (15 reps)",
+          "3 sets of lunges (10 reps per leg)",
+          "Plank for 60 seconds",
+        ];
+  };
+
+  const extractDietPlan = (text) => {
+    if (!text)
+      return [
+        "Breakfast: Protein smoothie with berries",
+        "Lunch: Grilled chicken salad",
+        "Dinner: Salmon with roasted vegetables",
+        "Snack: Greek yogurt with nuts",
+      ];
+
+    const dietLines = [];
+    const lines = text.split("\n");
+    let inDietSection = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      if (line.match(/meal plan|diet plan|nutrition/i)) {
+        inDietSection = true;
+        continue;
+      }
+
+      if (inDietSection && line.match(/workout|exercise|training plan/i)) {
+        inDietSection = false;
+        continue;
+      }
+
+      if (
+        inDietSection &&
+        (line.match(/^[\s]*[-*•]|\d+\.\s/) ||
+          line.match(/breakfast|lunch|dinner|snack/i))
+      ) {
+        const cleanLine = line.replace(/^[\s]*[-*•]|\d+\.\s/, "").trim();
+        if (cleanLine) dietLines.push(cleanLine);
+      }
+    }
+
+    return dietLines.length > 0
+      ? dietLines
+      : [
+          "Breakfast: Protein smoothie with berries",
+          "Lunch: Grilled chicken salad",
+          "Dinner: Salmon with roasted vegetables",
+          "Snack: Greek yogurt with nuts",
+        ];
   };
 
   return (
@@ -67,7 +216,18 @@ const GenerateFederateUI = ({ onBack }) => {
               AI Fitness Platform
             </h1>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={toggleApiMode}
+              className={`text-xs px-2 py-1 rounded ${
+                apiMode === "generate"
+                  ? "bg-indigo-200 text-indigo-800"
+                  : "bg-green-200 text-green-800"
+              }`}
+              title="Toggle between real API and test mode"
+            >
+              {apiMode === "generate" ? "API Mode" : "Test Mode"}
+            </button>
             <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-medium">
               JD
             </div>
@@ -79,306 +239,183 @@ const GenerateFederateUI = ({ onBack }) => {
             <div className="relative p-8 flex flex-col gap-6 z-10">
               <div className="flex flex-col items-center text-center">
                 <h2 className="text-4xl font-bold text-indigo-950 mb-2 tracking-tight">
-                  {activeTab === "generate"
-                    ? "Generate AI Plan"
-                    : "Federate AI Models"}
+                  Generate AI Plan
                 </h2>
                 <p className="text-indigo-800/70 text-lg max-w-2xl mb-6">
-                  {activeTab === "generate"
-                    ? "Get personalized workout and diet recommendations tailored to your goals and preferences"
-                    : "Combine multiple AI models to create a custom fitness assistant that meets your specific needs"}
+                  Get personalized workout and diet recommendations tailored to
+                  your goals and preferences
                 </p>
 
-                {/* Tabs */}
-                <div className="flex bg-white/50 rounded-full p-1 mb-8 border border-white/40">
-                  <button
-                    onClick={() => setActiveTab("generate")}
-                    className={`px-6 py-2 rounded-full text-lg font-medium transition-all duration-300 ${
-                      activeTab === "generate"
-                        ? "bg-indigo-600 text-white shadow-md"
-                        : "text-indigo-800 hover:bg-white/80"
-                    }`}
-                  >
-                    Generate
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("federate")}
-                    className={`px-6 py-2 rounded-full text-lg font-medium transition-all duration-300 ${
-                      activeTab === "federate"
-                        ? "bg-indigo-600 text-white shadow-md"
-                        : "text-indigo-800 hover:bg-white/80"
-                    }`}
-                  >
-                    Federate
-                  </button>
-                </div>
-
-                {activeTab === "generate" ? (
-                  <div className="w-full max-w-3xl">
-                    {generating ? (
-                      <div className="flex flex-col items-center py-16">
-                        <RefreshCw className="w-16 h-16 text-indigo-600 animate-spin mb-4" />
-                        <p className="text-indigo-800 text-xl">
-                          Creating your personalized plan...
-                        </p>
-                      </div>
-                    ) : generatedContent ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
-                        <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-md border border-white/40">
-                          <div className="flex items-center mb-4">
-                            <Dumbbell className="w-8 h-8 text-indigo-700 mr-3" />
-                            <h3 className="text-2xl font-bold text-indigo-900">
-                              Workout Plan
-                            </h3>
-                          </div>
-                          <div className="space-y-3">
-                            {generatedContent.workout.map((item, idx) => (
-                              <div key={idx} className="flex items-start">
-                                <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-800 font-medium text-sm mr-3 mt-0.5">
-                                  {idx + 1}
-                                </div>
-                                <p className="text-indigo-800">{item}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-md border border-white/40">
-                          <div className="flex items-center mb-4">
-                            <Utensils className="w-8 h-8 text-indigo-700 mr-3" />
-                            <h3 className="text-2xl font-bold text-indigo-900">
-                              Diet Plan
-                            </h3>
-                          </div>
-                          <div className="space-y-3">
-                            {generatedContent.diet.map((item, idx) => (
-                              <div key={idx} className="flex items-start">
-                                <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-800 font-medium text-sm mr-3 mt-0.5">
-                                  {idx + 1}
-                                </div>
-                                <p className="text-indigo-800">{item}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className="md:col-span-2 flex justify-center mt-4 space-x-4">
-                          <button
-                            onClick={handleGenerate}
-                            className="px-6 py-3 bg-indigo-600 text-white rounded-full shadow-md hover:shadow-lg hover:bg-indigo-700 transition-all duration-300 flex items-center space-x-2"
-                          >
-                            <RefreshCw className="w-5 h-5 mr-2" />
-                            <span>Regenerate Plan</span>
-                          </button>
-                          <button className="px-6 py-3 bg-white text-indigo-800 rounded-full shadow-md hover:shadow-lg hover:bg-white/90 transition-all duration-300 flex items-center">
-                            <Save className="w-5 h-5 mr-2" />
-                            <span>Save Plan</span>
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="w-full">
-                        <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-md border border-white/40 mb-6">
-                          <h3 className="text-xl font-semibold text-indigo-900 mb-4">
-                            Your Fitness Profile
-                          </h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="flex flex-col">
-                              <label className="text-indigo-800 mb-1 text-sm">
-                                Fitness Goal
-                              </label>
-                              <select className="bg-white/70 border border-indigo-200 rounded-lg px-4 py-2 text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                                <option>Weight Loss</option>
-                                <option>Muscle Gain</option>
-                                <option>Endurance</option>
-                                <option>General Fitness</option>
-                              </select>
-                            </div>
-                            <div className="flex flex-col">
-                              <label className="text-indigo-800 mb-1 text-sm">
-                                Experience Level
-                              </label>
-                              <select className="bg-white/70 border border-indigo-200 rounded-lg px-4 py-2 text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                                <option>Beginner</option>
-                                <option>Intermediate</option>
-                                <option>Advanced</option>
-                              </select>
-                            </div>
-                            <div className="flex flex-col">
-                              <label className="text-indigo-800 mb-1 text-sm">
-                                Workout Duration
-                              </label>
-                              <select className="bg-white/70 border border-indigo-200 rounded-lg px-4 py-2 text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                                <option>15-30 minutes</option>
-                                <option>30-45 minutes</option>
-                                <option>45-60 minutes</option>
-                                <option>60+ minutes</option>
-                              </select>
-                            </div>
-                            <div className="flex flex-col">
-                              <label className="text-indigo-800 mb-1 text-sm">
-                                Dietary Preference
-                              </label>
-                              <select className="bg-white/70 border border-indigo-200 rounded-lg px-4 py-2 text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                                <option>No Preference</option>
-                                <option>Vegetarian</option>
-                                <option>Vegan</option>
-                                <option>Keto</option>
-                                <option>Paleo</option>
-                              </select>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex justify-center">
-                          <button
-                            onClick={handleGenerate}
-                            className="px-8 py-3.5 bg-indigo-600 text-white rounded-full shadow-lg hover:shadow-xl hover:bg-indigo-700 transition-all duration-300 text-lg font-medium"
-                          >
-                            Generate My Plan
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="w-full max-w-3xl">
-                    <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-md border border-white/40 mb-6">
-                      <h3 className="text-xl font-semibold text-indigo-900 mb-4">
-                        Select AI Models to Federate
-                      </h3>
-                      <p className="text-indigo-800/80 mb-6">
-                        Combine multiple specialized AI models to create a
-                        custom fitness assistant tailored to your specific
-                        needs.
+                <div className="w-full max-w-3xl">
+                  {generating ? (
+                    <div className="flex flex-col items-center py-16">
+                      <RefreshCw className="w-16 h-16 text-indigo-600 animate-spin mb-4" />
+                      <p className="text-indigo-800 text-xl">
+                        Creating your personalized plan...
                       </p>
-
-                      <div className="space-y-4">
-                        <div className="flex items-center bg-white/50 p-4 rounded-xl border border-indigo-100 hover:shadow-md transition-all">
-                          <input
-                            type="checkbox"
-                            id="model1"
-                            className="w-5 h-5 text-indigo-600 rounded"
-                            defaultChecked
-                          />
-                          <label htmlFor="model1" className="ml-3 flex-1">
-                            <span className="block text-lg font-medium text-indigo-900">
-                              Workout Optimization AI
-                            </span>
-                            <span className="block text-sm text-indigo-700/70">
-                              Specialized in creating effective exercise
-                              routines
-                            </span>
-                          </label>
-                          <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm">
-                            Core Model
-                          </span>
-                        </div>
-
-                        <div className="flex items-center bg-white/50 p-4 rounded-xl border border-indigo-100 hover:shadow-md transition-all">
-                          <input
-                            type="checkbox"
-                            id="model2"
-                            className="w-5 h-5 text-indigo-600 rounded"
-                            defaultChecked
-                          />
-                          <label htmlFor="model2" className="ml-3 flex-1">
-                            <span className="block text-lg font-medium text-indigo-900">
-                              Nutrition Planning AI
-                            </span>
-                            <span className="block text-sm text-indigo-700/70">
-                              Expert in dietary recommendations and meal
-                              planning
-                            </span>
-                          </label>
-                          <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm">
-                            Core Model
-                          </span>
-                        </div>
-
-                        <div className="flex items-center bg-white/50 p-4 rounded-xl border border-indigo-100 hover:shadow-md transition-all">
-                          <input
-                            type="checkbox"
-                            id="model3"
-                            className="w-5 h-5 text-indigo-600 rounded"
-                          />
-                          <label htmlFor="model3" className="ml-3 flex-1">
-                            <span className="block text-lg font-medium text-indigo-900">
-                              Injury Prevention AI
-                            </span>
-                            <span className="block text-sm text-indigo-700/70">
-                              Focuses on safe exercise execution and recovery
-                            </span>
-                          </label>
-                          <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm">
-                            Premium
-                          </span>
-                        </div>
-
-                        <div className="flex items-center bg-white/50 p-4 rounded-xl border border-indigo-100 hover:shadow-md transition-all">
-                          <input
-                            type="checkbox"
-                            id="model4"
-                            className="w-5 h-5 text-indigo-600 rounded"
-                          />
-                          <label htmlFor="model4" className="ml-3 flex-1">
-                            <span className="block text-lg font-medium text-indigo-900">
-                              Progress Tracking AI
-                            </span>
-                            <span className="block text-sm text-indigo-700/70">
-                              Analyzes your progress and adjusts recommendations
-                            </span>
-                          </label>
-                          <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm">
-                            Premium
-                          </span>
-                        </div>
+                    </div>
+                  ) : error ? (
+                    <div className="bg-red-50 border border-red-200 text-red-800 rounded-lg p-6 mb-6">
+                      <div className="flex items-center mb-3">
+                        <AlertTriangle className="w-6 h-6 text-red-600 mr-2" />
+                        <h3 className="text-lg font-semibold">Error</h3>
+                      </div>
+                      <p className="mb-4">{error}</p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={handleGenerate}
+                          className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-800 rounded-lg font-medium text-sm"
+                        >
+                          Try Again
+                        </button>
+                        <button
+                          onClick={toggleApiMode}
+                          className="px-4 py-2 bg-green-100 hover:bg-green-200 text-green-800 rounded-lg font-medium text-sm"
+                        >
+                          Switch to{" "}
+                          {apiMode === "generate" ? "Test Mode" : "API Mode"}
+                        </button>
                       </div>
                     </div>
-
-                    <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-md border border-white/40 mb-6">
-                      <h3 className="text-xl font-semibold text-indigo-900 mb-4">
-                        Federation Settings
-                      </h3>
-                      <div className="space-y-4">
-                        <div className="flex flex-col">
-                          <label className="text-indigo-800 mb-1 text-sm">
-                            Model Integration Method
-                          </label>
-                          <select className="bg-white/70 border border-indigo-200 rounded-lg px-4 py-2 text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                            <option>Weighted Ensemble</option>
-                            <option>Sequential Processing</option>
-                            <option>Parallel Processing</option>
-                          </select>
+                  ) : generatedContent ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
+                      <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-md border border-white/40">
+                        <div className="flex items-center mb-4">
+                          <Dumbbell className="w-8 h-8 text-indigo-700 mr-3" />
+                          <h3 className="text-2xl font-bold text-indigo-900">
+                            Workout Plan
+                          </h3>
                         </div>
-
-                        <div className="flex flex-col">
-                          <label className="text-indigo-800 mb-1 text-sm">
-                            Model Conflict Resolution
-                          </label>
-                          <select className="bg-white/70 border border-indigo-200 rounded-lg px-4 py-2 text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                            <option>Prioritize Safety</option>
-                            <option>Prioritize Efficiency</option>
-                            <option>Balanced Approach</option>
-                          </select>
+                        <div className="space-y-3">
+                          {generatedContent.workout.map((item, idx) => (
+                            <div key={idx} className="flex items-start">
+                              <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-800 font-medium text-sm mr-3 mt-0.5">
+                                {idx + 1}
+                              </div>
+                              <p className="text-indigo-800">{item}</p>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex justify-center space-x-4">
-                      <button
-                        className="px-8 py-3.5 bg-indigo-600 text-white rounded-full shadow-lg hover:shadow-xl hover:bg-indigo-700 transition-all duration-300 text-lg font-medium"
-                        onClick={handleGenerate}
-                      >
-                        Create Federated AI
-                      </button>
-                      <button className="px-6 py-3.5 bg-white text-indigo-800 rounded-full shadow-md hover:shadow-lg hover:bg-white/90 transition-all duration-300 flex items-center">
-                        <Share2 className="w-5 h-5 mr-2" />
-                        <span>Share Configuration</span>
-                      </button>
+                      <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-md border border-white/40">
+                        <div className="flex items-center mb-4">
+                          <Utensils className="w-8 h-8 text-indigo-700 mr-3" />
+                          <h3 className="text-2xl font-bold text-indigo-900">
+                            Diet Plan
+                          </h3>
+                        </div>
+                        <div className="space-y-3">
+                          {generatedContent.diet.map((item, idx) => (
+                            <div key={idx} className="flex items-start">
+                              <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-800 font-medium text-sm mr-3 mt-0.5">
+                                {idx + 1}
+                              </div>
+                              <p className="text-indigo-800">{item}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="md:col-span-2 flex justify-center mt-4 space-x-4">
+                        <button
+                          onClick={handleGenerate}
+                          className="px-6 py-3 bg-indigo-600 text-white rounded-full shadow-md hover:shadow-lg hover:bg-indigo-700 transition-all duration-300 flex items-center space-x-2"
+                        >
+                          <RefreshCw className="w-5 h-5 mr-2" />
+                          <span>Regenerate Plan</span>
+                        </button>
+                        <button className="px-6 py-3 bg-white text-indigo-800 rounded-full shadow-md hover:shadow-lg hover:bg-white/90 transition-all duration-300 flex items-center">
+                          <Save className="w-5 h-5 mr-2" />
+                          <span>Save Plan</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <div className="w-full">
+                      <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-md border border-white/40 mb-6">
+                        <h3 className="text-xl font-semibold text-indigo-900 mb-4">
+                          Your Fitness Profile
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="flex flex-col">
+                            <label className="text-indigo-800 mb-1 text-sm">
+                              Fitness Goal
+                            </label>
+                            <select
+                              name="fitnessGoal"
+                              value={formData.fitnessGoal}
+                              onChange={handleInputChange}
+                              className="bg-white/70 border border-indigo-200 rounded-lg px-4 py-2 text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                              <option>Weight Loss</option>
+                              <option>Muscle Gain</option>
+                              <option>Endurance</option>
+                              <option>General Fitness</option>
+                            </select>
+                          </div>
+                          <div className="flex flex-col">
+                            <label className="text-indigo-800 mb-1 text-sm">
+                              Experience Level
+                            </label>
+                            <select
+                              name="experienceLevel"
+                              value={formData.experienceLevel}
+                              onChange={handleInputChange}
+                              className="bg-white/70 border border-indigo-200 rounded-lg px-4 py-2 text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                              <option>Beginner</option>
+                              <option>Intermediate</option>
+                              <option>Advanced</option>
+                            </select>
+                          </div>
+                          <div className="flex flex-col">
+                            <label className="text-indigo-800 mb-1 text-sm">
+                              Workout Duration
+                            </label>
+                            <select
+                              name="workoutDuration"
+                              value={formData.workoutDuration}
+                              onChange={handleInputChange}
+                              className="bg-white/70 border border-indigo-200 rounded-lg px-4 py-2 text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                              <option>15-30 minutes</option>
+                              <option>30-45 minutes</option>
+                              <option>45-60 minutes</option>
+                              <option>60+ minutes</option>
+                            </select>
+                          </div>
+                          <div className="flex flex-col">
+                            <label className="text-indigo-800 mb-1 text-sm">
+                              Dietary Preference
+                            </label>
+                            <select
+                              name="dietaryPreference"
+                              value={formData.dietaryPreference}
+                              onChange={handleInputChange}
+                              className="bg-white/70 border border-indigo-200 rounded-lg px-4 py-2 text-indigo-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                              <option>No Preference</option>
+                              <option>Vegetarian</option>
+                              <option>Vegan</option>
+                              <option>Keto</option>
+                              <option>Paleo</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-center">
+                        <button
+                          onClick={handleGenerate}
+                          className="px-8 py-3.5 bg-indigo-600 text-white rounded-full shadow-lg hover:shadow-xl hover:bg-indigo-700 transition-all duration-300 text-lg font-medium"
+                        >
+                          Generate My Plan
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
